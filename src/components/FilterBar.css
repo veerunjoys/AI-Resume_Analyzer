@@ -1,0 +1,410 @@
+/* Premium Filter Bar Container */
+.filter-bar-container {
+  position: relative;
+  display: inline-block;
+}
+
+/* Row wrapper for search box and toggle button */
+.filter-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Search Box Container */
+.filter-input-search {
+  position: relative;
+  width: 260px;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon-svg {
+  position: absolute;
+  left: 12px;
+  opacity: 0.6;
+  display: flex;
+  align-items: center;
+  color: #64748b;
+}
+
+.filter-input-search input {
+  width: 100%;
+  padding: 8px 32px 8px 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.15s ease;
+  height: 38px;
+  box-sizing: border-box;
+}
+
+.filter-input-search input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 10px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-clear-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Search submit button */
+.search-submit-btn {
+  background: #4f46e5;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  height: 38px;
+  transition: background-color 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  outline: none;
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.1);
+}
+
+.search-submit-btn:hover {
+  background: #4338ca;
+}
+
+/* Filter icon toggle button */
+.filter-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  height: 38px;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+  outline: none;
+  user-select: none;
+}
+
+.filter-toggle-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.filter-toggle-btn.active {
+  background: #e0e7ff;
+  border-color: #6366f1;
+  color: #4f46e5;
+}
+
+/* Active filter count badge on the button */
+.filter-count-badge {
+  background: #4f46e5;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 2px;
+}
+
+/* Global Loading Spinner in filter */
+.filter-loader-mini {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner-mini {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #4f46e5;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Floating selectors dropdown card */
+.filter-selectors-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+}
+
+/* Floating card slide-down animation */
+.animate-slide-down {
+  animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 10px;
+}
+
+.dropdown-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.reset-filters-btn-text {
+  background: none;
+  border: none;
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.reset-filters-btn-text:hover {
+  text-decoration: underline;
+}
+
+.filter-selectors-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.selector-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.selector-group label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+}
+
+.selector-group select {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  height: 36px;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease;
+}
+
+.selector-group select:focus {
+  border-color: #6366f1;
+}
+
+/* Skill Custom dropdown trigger */
+.skill-multi-select {
+  position: relative;
+}
+
+.skill-select-trigger {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+  height: 36px;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.skill-select-trigger:hover {
+  border-color: #6366f1;
+}
+
+.arrow-icon {
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+/* Checkbox dropdown menu container */
+.skills-dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+  max-height: 180px;
+  overflow-y: auto;
+  z-index: 1100;
+  padding: 4px;
+}
+
+.skill-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: #0f172a;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+
+.skill-dropdown-item:hover {
+  background: #f1f5f9;
+}
+
+.skill-dropdown-item.selected {
+  background: #e0e7ff;
+  color: #4f46e5;
+  font-weight: 500;
+}
+
+.skill-dropdown-item input[type="checkbox"] {
+  accent-color: #4f46e5;
+  cursor: pointer;
+}
+
+/* Active Chips area inside dropdown card */
+.dropdown-active-chips-section {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.active-filters-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.active-skills-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.skill-chip {
+  background: #e0e7ff;
+  color: #4f46e5;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip-remove {
+  background: none;
+  border: none;
+  color: #4f46e5;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+}
+
+.chip-remove:hover {
+  opacity: 1;
+}
+
+@media (max-width: 600px) {
+  .filter-bar-controls {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+  .filter-input-search {
+    width: 100%;
+  }
+  .filter-toggle-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .filter-selectors-dropdown {
+    width: 100%;
+    right: auto;
+    left: 0;
+  }
+}

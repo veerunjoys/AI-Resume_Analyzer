@@ -1,0 +1,240 @@
+/* Backdrop overlay */
+.resolution-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(17, 24, 39, 0.6); /* dark overlay */
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100; /* Higher than candidate details modal */
+  animation: modal-fadeIn 0.25s ease-out;
+}
+
+/* Modal Container */
+.resolution-modal-container {
+  background: var(--bg);
+  border-radius: 14px;
+  width: 90%;
+  max-width: 680px;
+  max-height: 85vh;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modal-slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Header */
+.resolution-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--code-bg);
+}
+
+.resolution-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-h);
+  margin: 0;
+}
+
+.warning-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Body */
+.resolution-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.resolution-desc {
+  font-size: 14px;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.resolution-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Diff List */
+.diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.diff-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diff-field-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 1px;
+  text-align: left;
+}
+
+.diff-side-by-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.diff-panel {
+  border-radius: 8px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.diff-yours {
+  background: rgba(16, 185, 129, 0.04);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.diff-theirs {
+  background: rgba(59, 130, 246, 0.04);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.diff-panel-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.diff-yours .diff-panel-title {
+  color: #059669;
+}
+
+.diff-theirs .diff-panel-title {
+  color: #2563eb;
+}
+
+.diff-value {
+  font-size: 13.5px;
+  color: var(--text-h);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-empty {
+  font-style: italic;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+/* Footer */
+.resolution-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--code-bg);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.resolution-btn {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.resolution-btn.keep-mine {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+}
+
+.resolution-btn.keep-mine:hover {
+  background: #059669;
+  transform: translateY(-1px);
+}
+
+.resolution-btn.keep-theirs {
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+}
+
+.resolution-btn.keep-theirs:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.resolution-btn.edit-manually {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-h);
+}
+
+.resolution-btn.edit-manually:hover {
+  background: var(--bg);
+  border-color: var(--text);
+}
+
+.resolution-btn.close-btn {
+  background: none;
+  border: none;
+  color: var(--text);
+}
+
+.resolution-btn.close-btn:hover {
+  color: var(--text-h);
+}
+
+/* Keyframe animations */
+@keyframes modal-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-slideUp {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
