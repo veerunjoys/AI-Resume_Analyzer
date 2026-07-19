@@ -2,7 +2,7 @@
 
 The recruiter-facing web app for AI Resume Analyzer: a workspace for tracking candidates,
 uploading resumes for AI-powered parsing and scoring, and matching candidates against open jobs.
-Built as a single-page React application.
+Built as a single-page React application the working url :https://ai-resume-analyzer-plum-delta.vercel.app/.
 
 ## What it does
 
@@ -103,3 +103,4 @@ npm run build
 ```
 
 Outputs a production build to `dist/`, ready to deploy (e.g. on Vercel).
+This is the workign
