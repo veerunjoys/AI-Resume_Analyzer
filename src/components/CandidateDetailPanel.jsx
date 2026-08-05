@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import config from '../config';
 import { apiClient } from '../apiClient';
 import UploadPanel from './UploadPanel';
@@ -71,6 +71,11 @@ export default function CandidateDetailPanel({ candidateId, onSaveSuccess, lastU
   // AI Analysis (resume-quality score) States
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [isAnalysisSectionOpen, setIsAnalysisSectionOpen] = useState(true);
+
+  // Tracks the most recently requested candidateId so a slow-resolving fetch
+  // for a candidate the user has already navigated away from can't overwrite
+  // the panel with stale data (e.g. clicking candidate A then quickly B).
+  const latestRequestedIdRef = useRef(null);
 
   // Fetch parsed resume data for Draft candidates
   useEffect(() => {
@@ -145,6 +150,8 @@ export default function CandidateDetailPanel({ candidateId, onSaveSuccess, lastU
   }, []);
 
   const loadCandidateData = async (targetId) => {
+    latestRequestedIdRef.current = targetId;
+
     if (!targetId) {
       setCandidate(null);
       setConflictRecord(null);
@@ -173,6 +180,12 @@ export default function CandidateDetailPanel({ candidateId, onSaveSuccess, lastU
         };
       }
 
+      // Bail if the user has since navigated to a different candidate —
+      // otherwise a slower-resolving fetch for a previously-selected
+      // candidate can overwrite the panel after a newer selection already
+      // loaded (rapid clicking between candidates).
+      if (latestRequestedIdRef.current !== targetId) return;
+
       setCandidate(data);
       setStatus(data.status);
       setNotes(data.notes || '');
@@ -185,6 +198,7 @@ export default function CandidateDetailPanel({ candidateId, onSaveSuccess, lastU
       setExperience(data.experience !== null && data.experience !== undefined ? data.experience.toString() : '');
 
       const conflict = await offlineQueue.getConflict(targetId);
+      if (latestRequestedIdRef.current !== targetId) return;
       setConflictRecord(conflict);
       if (conflict) {
         setIsResolutionModalOpen(true);
@@ -192,9 +206,10 @@ export default function CandidateDetailPanel({ candidateId, onSaveSuccess, lastU
         setIsResolutionModalOpen(false);
       }
     } catch (err) {
+      if (latestRequestedIdRef.current !== targetId) return;
       setError(err.message || 'Error fetching details.');
     } finally {
-      setIsLoading(false);
+      if (latestRequestedIdRef.current === targetId) setIsLoading(false);
     }
   };
 

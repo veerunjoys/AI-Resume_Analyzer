@@ -52,7 +52,6 @@ client/
 │   │   ├── FilterBar.jsx           ← Search/filter controls
 │   │   ├── UploadPanel.jsx         ← Resume upload UI
 │   │   ├── UploadStatusTracker.jsx ← Live chunked-upload/processing progress
-│   │   ├── SearchPage.jsx          ← Full-text candidate search
 │   │   ├── JobsPage.jsx            ← Job postings + candidate matches
 │   │   ├── MetricsDashboardPage.jsx← Aggregate stats dashboard
 │   │   └── Pagination.jsx

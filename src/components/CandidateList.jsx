@@ -341,6 +341,10 @@ export default function CandidateList({ totalRows, fetchPage, onSelectCandidate,
 
   const containerRef = useRef(null);
   const tickingRef = useRef(false);
+  // Tracks the most recently requested page so a slow-resolving fetch for a
+  // page the user has since navigated away from (e.g. double-clicking
+  // "Next") can't overwrite a newer page's already-rendered results.
+  const latestRequestedPageRef = useRef(1);
 
   // Throttled scroll handler using requestAnimationFrame
   const handleScroll = () => {
@@ -360,10 +364,12 @@ export default function CandidateList({ totalRows, fetchPage, onSelectCandidate,
 
   // Trigger page loading
   const loadPage = async (pageNumber) => {
+    latestRequestedPageRef.current = pageNumber;
     dispatch({ type: 'FETCH_START' });
     try {
       const cursorToUse = pageCursors[pageNumber] || null;
       const data = await fetchPage(cursorToUse);
+      if (latestRequestedPageRef.current !== pageNumber) return; // stale — a newer page request has since superseded this one
 
       // Load pending edits to overlay them
       const pendingEdits = await offlineQueue.getAll();
@@ -418,6 +424,7 @@ export default function CandidateList({ totalRows, fetchPage, onSelectCandidate,
         containerRef.current.scrollTop = 0;
       }
     } catch (err) {
+      if (latestRequestedPageRef.current !== pageNumber) return;
       dispatch({
         type: 'FETCH_ERROR',
         payload: err.message || 'Failed to load page.',

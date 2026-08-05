@@ -44,12 +44,11 @@ export async function syncOfflineActions() {
       const originalAction = pending.find(a => a.client_action_id === result.client_action_id);
       if (!originalAction) continue;
 
-      // Always remove enqueued item from offlineQueue
-      await offlineQueue.remove(result.client_action_id);
-
       if (result.status === 'applied' || result.status === 'merged') {
+        await offlineQueue.remove(result.client_action_id);
         console.log(`[Sync Manager] Action ${result.client_action_id} successfully synced/resolved.`);
       } else if (result.status === 'conflict') {
+        await offlineQueue.remove(result.client_action_id);
         const timestamp = new Date().toISOString();
         const conflictsList = [];
 
@@ -75,7 +74,12 @@ export async function syncOfflineActions() {
         await offlineQueue.saveConflict(conflictRecord);
         console.log(`[Sync Manager] Conflict stored for candidate ${originalAction.candidate_id}.`);
       } else {
-        console.warn(`[Sync Manager] Action ${result.client_action_id} failed:`, result.error);
+        // Deliberately NOT removing from the queue here — this used to always
+        // remove regardless of status, so a server-side error (e.g. a
+        // transient DB blip during replay) silently deleted the recruiter's
+        // offline edit with nothing but a console warning. Leaving it queued
+        // means the next sync cycle retries it instead of losing it.
+        console.warn(`[Sync Manager] Action ${result.client_action_id} failed and will be retried on next sync:`, result.error);
       }
     }
 

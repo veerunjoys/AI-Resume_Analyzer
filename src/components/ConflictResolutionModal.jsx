@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import config from '../config.js';
+import { apiClient } from '../apiClient.js';
 import * as offlineQueue from '../utils/offlineQueue.js';
 import wsClient from '../utils/webSocketClient.js';
 import './ConflictResolutionModal.css';
@@ -40,7 +41,7 @@ export default function ConflictResolutionModal({
         headers['X-Client-Id'] = wsClient.clientId;
       }
 
-      const res = await fetch(`${config.apiBaseUrl}/api/candidates/${candidate.id}`, {
+      const res = await apiClient(`${config.apiBaseUrl}/api/candidates/${candidate.id}`, {
         method: 'PUT',
         headers,
         body: JSON.stringify(updateBody),
@@ -95,7 +96,7 @@ export default function ConflictResolutionModal({
         headers['X-Client-Id'] = wsClient.clientId;
       }
 
-      const res = await fetch(`${config.apiBaseUrl}/api/candidates/${candidate.id}`, {
+      const res = await apiClient(`${config.apiBaseUrl}/api/candidates/${candidate.id}`, {
         method: 'PUT',
         headers,
         body: JSON.stringify(updateBody),
