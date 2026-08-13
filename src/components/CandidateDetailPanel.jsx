@@ -638,7 +638,15 @@ export default function CandidateDetailPanel({ candidateId, onSaveSuccess, lastU
               </div>
             )}
 
-            {candidate.status === 'Draft' && (
+            {candidate.name === 'Draft Candidate' ? (
+              <div className="draft-alert-banner processing-active">
+                <div className="loading-spinner-small" style={{ flexShrink: 0, margin: '2px 4px 0 0' }}></div>
+                <div className="draft-alert-text">
+                  <strong>Extracting Resume...</strong>
+                  <span>Gemini is currently parsing and analyzing the resume in the background. This panel will update automatically when complete.</span>
+                </div>
+              </div>
+            ) : candidate.status === 'Draft' && (
               <div className="draft-alert-banner">
                 <AlertTriangle size={16} />
                 <div className="draft-alert-text">

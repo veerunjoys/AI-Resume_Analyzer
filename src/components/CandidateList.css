@@ -371,3 +371,14 @@
   max-width: 320px;
   line-height: 1.5;
 }
+
+/* Candidate processing text animations */
+@keyframes candidatePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.candidate-processing-pulse {
+  animation: candidatePulse 1.5s infinite ease-in-out;
+  color: #4f46e5;
+  font-weight: 600;
+}

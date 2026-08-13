@@ -942,3 +942,25 @@
   background: #fee2e2;
   color: #b91c1c;
 }
+
+/* Background processing alerts & spinners */
+.draft-alert-banner.processing-active {
+  background-color: rgba(79, 70, 229, 0.05);
+  color: #4f46e5;
+  border: 1px solid rgba(79, 70, 229, 0.15);
+}
+
+.loading-spinner-small {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #4f46e5;
+  border-radius: 50%;
+  animation: spinnerRotate 0.8s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+@keyframes spinnerRotate {
+  to { transform: rotate(360deg); }
+}

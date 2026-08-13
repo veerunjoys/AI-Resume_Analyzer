@@ -49,12 +49,17 @@ const CandidateRowItem = React.memo(function CandidateRowItem({
                 overflow: 'hidden', 
                 textOverflow: 'ellipsis', 
                 maxWidth: '240px',
-                color: '#0f172a',
+                color: candidate.name === 'Draft Candidate' ? '#4f46e5' : '#0f172a',
+                fontStyle: candidate.name === 'Draft Candidate' ? 'italic' : 'normal',
                 fontWeight: '600'
               }} 
-              title={candidate.name}
+              title={candidate.name === 'Draft Candidate' ? 'Parsing resume fields with Gemini' : candidate.name}
             >
-              {candidate.name}
+              {candidate.name === 'Draft Candidate' ? (
+                <span className="candidate-processing-pulse">
+                  Processing Resume...
+                </span>
+              ) : candidate.name}
             </span>
             {candidate.pendingSync && (
               <span className="pending-sync-badge-list" title="Pending Sync" style={{ flexShrink: 0 }}>
