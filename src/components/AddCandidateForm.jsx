@@ -34,11 +34,12 @@ export default function AddCandidateForm({ isOpen, onClose, onSuccess, onSelectC
   const [resumeFile, setResumeFile] = useState(null);
   const [experience, setExperience] = useState('');
 
-  // Upload Tab State
-  const [uploadFile, setUploadFile] = useState(null);
+  // Upload Tab State (Batch Bundling)
+  const [uploadFilesList, setUploadFilesList] = useState([]);
   const [dragActive, setDragActive] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStatus, setUploadStatus] = useState('idle'); // 'idle' | 'uploading' | 'completed' | 'failed'
+  const [uploadStatus, setUploadStatus] = useState('idle'); // Used for manual tab uploads
   const [duplicateCandidate, setDuplicateCandidate] = useState(null);
 
   const [errors, setErrors] = useState({});
@@ -70,25 +71,36 @@ export default function AddCandidateForm({ isOpen, onClose, onSuccess, onSelectC
     e.stopPropagation();
     setDragActive(false);
 
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       if (activeTab === 'manual') {
         setResumeFile(e.dataTransfer.files[0]);
       } else {
-        setUploadFile(e.dataTransfer.files[0]);
-        setUploadStatus('idle');
+        handleBatchFileSelection(e.dataTransfer.files);
       }
     }
   };
 
   const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
+    if (e.target.files && e.target.files.length > 0) {
       if (activeTab === 'manual') {
         setResumeFile(e.target.files[0]);
       } else {
-        setUploadFile(e.target.files[0]);
-        setUploadStatus('idle');
+        handleBatchFileSelection(e.target.files);
       }
     }
+  };
+
+  const handleBatchFileSelection = (files) => {
+    const fileArray = Array.from(files);
+    const newItems = fileArray.map(f => ({
+      id: `${f.name}-${f.size}-${Date.now()}-${Math.random()}`,
+      file: f,
+      progress: 0,
+      status: 'pending',
+      errorMessage: '',
+      duplicateCandidateId: ''
+    }));
+    setUploadFilesList(prev => [...prev, ...newItems]);
   };
 
   // Add skill tag handler
@@ -221,206 +233,277 @@ export default function AddCandidateForm({ isOpen, onClose, onSuccess, onSelectC
     }
   };
 
+  // Upload a single file through the credentials/chunk/dedup pipeline
+  const uploadSingleFile = async (fileObj, onProgressCallback) => {
+    // 1. Checksum calculation
+    const checksum = await computeSHA256(fileObj.file);
+
+    // 2. Dedup check
+    const dedupRes = await apiClient(`${config.orchestratorUrl}/orchestrator/dedup-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checksum }),
+    });
+
+    if (!dedupRes.ok) {
+      throw new Error('Failed to verify resume deduplication status.');
+    }
+
+    const dedupResult = await dedupRes.json();
+    if (dedupResult.duplicate) {
+      return { status: 'duplicate', existingCandidateId: dedupResult.existingCandidateId };
+    }
+
+    // 3. Create Draft Candidate profile
+    const placeholderUuid = crypto.randomUUID();
+    const draftEmail = `draft_${placeholderUuid.slice(0, 8)}@placeholder.com`;
+    const draftRes = await apiClient(`${config.apiBaseUrl}/api/candidates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Draft Candidate',
+        email: draftEmail,
+        status: 'Draft',
+        skills: []
+      }),
+    });
+
+    if (!draftRes.ok) {
+      const errBody = await draftRes.json();
+      throw new Error(errBody.error || 'Failed to provision Draft candidate profile.');
+    }
+
+    const draftCandidate = await draftRes.json();
+    const candidateId = draftCandidate.id;
+
+    // 4. Get Credentials
+    const credsRes = await apiClient(`${config.orchestratorUrl}/orchestrator/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ candidateId, fileName: fileObj.file.name }),
+    });
+
+    if (!credsRes.ok) {
+      throw new Error('Failed to request upload credentials.');
+    }
+
+    const creds = await credsRes.json();
+
+    // 5. Validate upload
+    const validateRes = await apiClient(`${config.orchestratorUrl}/orchestrator/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uploadToken: creds.token,
+        candidateId,
+        fileName: fileObj.file.name,
+        fileSizeBytes: fileObj.file.size,
+        mimeType: fileObj.file.type || 'application/octet-stream',
+      }),
+    });
+
+    if (!validateRes.ok) {
+      const valErr = await validateRes.json();
+      throw new Error(valErr.reason || 'Credentials validation failed.');
+    }
+
+    const validateResult = await validateRes.json();
+    const uploadId = validateResult.uploadId;
+
+    // 6. Start Chunked Upload
+    await new Promise((resolve, reject) => {
+      const controller = createResumableUpload(fileObj.file, candidateId, {
+        onProgress: (progress) => {
+          onProgressCallback(progress);
+        },
+        onComplete: () => {
+          resolve();
+        },
+        onError: (err) => {
+          reject(err);
+        },
+      });
+      controller.start();
+    });
+
+    // 7. Register checksum (emits ResumeUploaded event on the backend)
+    await apiClient(`${config.orchestratorUrl}/orchestrator/dedup-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checksum, candidateId, uploadId }),
+    });
+
+    return { status: 'completed', candidateId, uploadId };
+  };
+
   // Resume Upload Intake Stream Flow
   const handleResumeIntakeSubmit = async (e) => {
     e.preventDefault();
-    if (!uploadFile) {
-      setErrors({ general: 'Please select a resume file first.' });
+    if (uploadFilesList.length === 0) {
+      setErrors({ general: 'Please select or drop resume files first.' });
       return;
     }
 
     setIsSubmitting(true);
     setErrors({});
-    setUploadStatus('uploading');
 
-    try {
-      // 1. Checksum calculation
-      const checksum = await computeSHA256(uploadFile);
+    // Filter out files that are already completed or duplicate
+    const filesToUpload = uploadFilesList.filter(
+      (f) => f.status === 'pending' || f.status === 'failed'
+    );
 
-      // 2. Dedup check
-      const dedupRes = await apiClient(`${config.orchestratorUrl}/orchestrator/dedup-check`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ checksum }),
-      });
-
-      if (!dedupRes.ok) {
-        throw new Error('Failed to verify resume deduplication status.');
-      }
-
-      const dedupResult = await dedupRes.json();
-      if (dedupResult.duplicate) {
-        setDuplicateCandidate({
-          existingCandidateId: dedupResult.existingCandidateId,
-          existingUploadId: dedupResult.existingUploadId,
-        });
-        setIsSubmitting(false);
-        setUploadStatus('idle');
-        return;
-      }
-
-      // 3. Create Draft Candidate profile
-      const placeholderUuid = crypto.randomUUID();
-      const draftEmail = `draft_${placeholderUuid.slice(0, 8)}@placeholder.com`;
-      const draftRes = await apiClient(`${config.apiBaseUrl}/api/candidates`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'Draft Candidate',
-          email: draftEmail,
-          status: 'Draft',
-          skills: []
-        }),
-      });
-
-      if (!draftRes.ok) {
-        const errBody = await draftRes.json();
-        throw new Error(errBody.error || 'Failed to provision Draft candidate profile.');
-      }
-
-      const draftCandidate = await draftRes.json();
-      const candidateId = draftCandidate.id;
-
-      // 4. Get Credentials
-      const credsRes = await apiClient(`${config.orchestratorUrl}/orchestrator/credentials`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidateId, fileName: uploadFile.name }),
-      });
-
-      if (!credsRes.ok) {
-        throw new Error('Failed to request upload credentials.');
-      }
-
-      const creds = await credsRes.json();
-
-      // 5. Validate
-      const validateRes = await apiClient(`${config.orchestratorUrl}/orchestrator/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          uploadToken: creds.token,
-          candidateId,
-          fileName: uploadFile.name,
-          fileSizeBytes: uploadFile.size,
-          mimeType: uploadFile.type || 'application/octet-stream',
-        }),
-      });
-
-      if (!validateRes.ok) {
-        const valErr = await validateRes.json();
-        throw new Error(valErr.reason || 'Credentials validation failed.');
-      }
-
-      const validateResult = await validateRes.json();
-      const uploadId = validateResult.uploadId;
-
-      // 6. Start Chunked Upload
-      await new Promise((resolve, reject) => {
-        const controller = createResumableUpload(uploadFile, candidateId, {
-          onProgress: (progress) => {
-            setUploadProgress(progress);
-          },
-          onComplete: () => {
-            resolve();
-          },
-          onError: (err) => {
-            reject(err);
-          },
-        });
-        controller.start();
-      });
-
-      // File transfer is done (progress bar at 100%), but the resume still
-      // needs to be parsed by Gemini in the background — switch to a
-      // "processing" state so the UI shows active work instead of sitting
-      // motionless at 100% for the ~10-20s the AI extraction call takes.
-      setUploadStatus('processing');
-
-      // 7. Register checksum with candidateId and uploadId
-      await apiClient(`${config.orchestratorUrl}/orchestrator/dedup-check`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ checksum, candidateId, uploadId }),
-      });
-
-      // 8. Poll status until completed or failed. Bounded so a backend edge
-      // case (missing tracking row, unexpected response shape) can't leave
-      // this spinning forever with no feedback — after ~2 minutes or repeated
-      // "not found" responses, surface an error instead of polling silently.
-      let pollAttempts = 0;
-      let notFoundStreak = 0;
-      const MAX_POLL_ATTEMPTS = 60; // 60 * 2s = 2 minutes
-      const NOT_FOUND_STREAK_LIMIT = 3;
-
-      const stopPollingWithError = (message) => {
-        clearInterval(pollIntervalRef.current);
-        setUploadStatus('failed');
-        setIsSubmitting(false);
-        setErrors({ general: message });
-      };
-
-      pollIntervalRef.current = setInterval(async () => {
-        pollAttempts++;
-        try {
-          const res = await apiClient(`${config.orchestratorUrl}/orchestrator/status/${uploadId}`);
-          if (res.ok) {
-            notFoundStreak = 0;
-            const match = await res.json();
-            if (match) {
-              if (match.status === 'completed') {
-                clearInterval(pollIntervalRef.current);
-                setUploadStatus('completed');
-
-                // Fetch the auto-created candidate record using final candidate ID from merge
-                const finalCandidateId = match.candidate_id || candidateId;
-                const candRes = await apiClient(`${config.apiBaseUrl}/api/candidates/${finalCandidateId}`);
-                if (candRes.ok) {
-                  const finalCandidate = await candRes.json();
-                  if (onSuccess) onSuccess(finalCandidate);
-                }
-                setIsSubmitting(false);
-                // Keep the file card + a "completed" checkmark visible for a
-                // beat so the recruiter actually sees it finish, instead of
-                // jumping straight to the empty dropzone before the modal
-                // closes. Only reset the file/status once we actually close.
-                setTimeout(() => {
-                  setUploadFile(null);
-                  setUploadStatus('idle');
-                  setUploadProgress(0);
-                  onClose();
-                }, 900);
-              } else if (match.status === 'failed') {
-                clearInterval(pollIntervalRef.current);
-                setUploadStatus('failed');
-                setIsSubmitting(false);
-                setErrors({ general: match.error_message || 'Resume parsing failed.' });
-              }
-            }
-          } else if (res.status === 404) {
-            // Tracking row missing — either genuinely lost, or the resume
-            // finished merging into an existing candidate. Give it a couple
-            // more tries before treating it as a real failure.
-            notFoundStreak++;
-            if (notFoundStreak >= NOT_FOUND_STREAK_LIMIT) {
-              stopPollingWithError('Lost track of this upload\'s status. Check the Candidates list — it may have completed and merged into an existing profile.');
-            }
-          }
-        } catch (pollErr) {
-          console.error('Error polling status:', pollErr);
-        }
-
-        if (pollAttempts >= MAX_POLL_ATTEMPTS) {
-          stopPollingWithError('Resume processing is taking longer than expected. Check the Candidates list or try again.');
-        }
-      }, 2000);
-
-    } catch (err) {
-      setErrors({ general: err.message || 'Upload failed.' });
-      setUploadStatus('failed');
+    if (filesToUpload.length === 0) {
       setIsSubmitting(false);
+      return;
     }
+
+    // Reset progress and error state for files being retried
+    setUploadFilesList((prev) =>
+      prev.map((item) => {
+        const found = filesToUpload.find((x) => x.id === item.id);
+        if (found) {
+          return { ...item, status: 'pending', progress: 0, errorMessage: '' };
+        }
+        return item;
+      })
+    );
+
+    const concurrencyLimit = 3;
+    let nextIndex = 0;
+
+    const runWorker = async () => {
+      while (nextIndex < filesToUpload.length) {
+        const currentIndex = nextIndex++;
+        const targetFile = filesToUpload[currentIndex];
+
+        // Mark file as uploading
+        setUploadFilesList((prev) =>
+          prev.map((item) =>
+            item.id === targetFile.id ? { ...item, status: 'uploading' } : item
+          )
+        );
+
+        try {
+          const result = await uploadSingleFile(targetFile, (progress) => {
+            setUploadFilesList((prev) =>
+              prev.map((item) =>
+                item.id === targetFile.id ? { ...item, progress } : item
+              )
+            );
+          });
+
+          if (result.status === 'duplicate') {
+            setUploadFilesList((prev) =>
+              prev.map((item) =>
+                item.id === targetFile.id
+                  ? {
+                      ...item,
+                      status: 'duplicate',
+                      duplicateCandidateId: result.existingCandidateId,
+                      progress: 100,
+                    }
+                  : item
+              )
+            );
+          } else {
+            setUploadFilesList((prev) =>
+              prev.map((item) =>
+                item.id === targetFile.id
+                  ? { ...item, status: 'completed', progress: 100 }
+                  : item
+              )
+            );
+          }
+        } catch (err) {
+          console.error(`Upload error for ${targetFile.file.name}:`, err);
+          setUploadFilesList((prev) =>
+            prev.map((item) =>
+              item.id === targetFile.id
+                ? {
+                    ...item,
+                    status: 'failed',
+                    errorMessage: err.message || 'Upload failed.',
+                  }
+                : item
+            )
+          );
+        }
+      }
+    };
+
+    // Run workers in parallel (up to concurrency limit)
+    const workers = [];
+    const numWorkers = Math.min(concurrencyLimit, filesToUpload.length);
+    for (let i = 0; i < numWorkers; i++) {
+      workers.push(runWorker());
+    }
+
+    await Promise.all(workers);
+    setIsSubmitting(false);
   };
+
+  if (isMinimized) {
+    const completedCount = uploadFilesList.filter(f => f.status === 'completed' || f.status === 'duplicate').length;
+    const totalCount = uploadFilesList.length;
+    const isUploading = uploadFilesList.some(f => f.status === 'uploading');
+    const failedCount = uploadFilesList.filter(f => f.status === 'failed').length;
+
+    let totalProgress = 0;
+    if (totalCount > 0) {
+      const sumProgress = uploadFilesList.reduce((acc, f) => acc + (f.progress || 0), 0);
+      totalProgress = Math.round(sumProgress / totalCount);
+    }
+
+    return (
+      <div className="upload-minimized-widget">
+        <div className="widget-header">
+          <span className="widget-title">
+            {isUploading ? 'Uploading Resumes...' : 'Uploads Finished'}
+          </span>
+          <div className="widget-actions">
+            <button
+              type="button"
+              className="widget-action-btn expand"
+              onClick={() => setIsMinimized(false)}
+            >
+              Expand
+            </button>
+            <button
+              type="button"
+              className="widget-action-btn close"
+              onClick={() => {
+                if (isUploading) {
+                  if (window.confirm("Active uploads will be interrupted. Are you sure you want to close?")) {
+                    setUploadFilesList([]);
+                    setIsMinimized(false);
+                    onClose();
+                  }
+                } else {
+                  setUploadFilesList([]);
+                  setIsMinimized(false);
+                  onClose();
+                }
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        <div className="widget-body">
+          <div className="widget-stats-row">
+            <span className="widget-count">{completedCount} / {totalCount} uploaded</span>
+            {failedCount > 0 && <span className="widget-failed-badge">{failedCount} failed</span>}
+          </div>
+          <div className="widget-progress-bar">
+            <div
+              className={`widget-progress-fill ${failedCount > 0 && !isUploading ? 'has-errors' : ''}`}
+              style={{ width: `${totalProgress}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-overlay">
@@ -689,99 +772,137 @@ export default function AddCandidateForm({ isOpen, onClose, onSuccess, onSelectC
         {activeTab === 'upload' && (
           <form onSubmit={handleResumeIntakeSubmit} className="modal-form">
             <div className="form-upload-group">
-              <label>Upload Candidate Resume</label>
-              {!uploadFile ? (
-                <div
-                  className={`drag-drop-zone ${dragActive ? 'active' : ''}`}
-                  onDragEnter={handleDrag}
-                  onDragOver={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDrop={handleDrop}
-                  onClick={() => document.getElementById('form-file-input-upload').click()}
-                >
-                  <span className="upload-icon-main"><UploadCloud size={20} /></span>
-                  <p className="drag-instructions">
-                    Drag & Drop candidate resume here, or browse files
-                  </p>
-                  <span className="supported-formats-text">Supported formats: PDF, DOC, DOCX, TXT (Max 20MB)</span>
-                  <input
-                    id="form-file-input-upload"
-                    type="file"
-                    accept=".pdf,.doc,.docx,.txt"
-                    className="hidden-file-input"
-                    onChange={handleFileChange}
-                    disabled={isSubmitting}
-                    style={{ display: 'none' }}
-                  />
-                </div>
-              ) : (
-                <div className="form-upload-file-card">
-                  <div className="form-upload-file-info">
-                    <span className="form-upload-filename">
-                      <Paperclip size={14} style={{ marginRight: '6px' }} />
-                      {uploadFile.name} ({(uploadFile.size / (1024 * 1024)).toFixed(2)} MB)
-                    </span>
-                    <button
-                      type="button"
-                      className="form-upload-remove-btn"
-                      onClick={() => {
-                        setUploadFile(null);
-                        setUploadStatus('idle');
-                        setUploadProgress(0);
-                      }}
-                      disabled={isSubmitting}
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
+              <label>Upload Candidate Resumes (Batch)</label>
+              
+              <div
+                className={`drag-drop-zone ${dragActive ? 'active' : ''} ${uploadFilesList.length > 0 ? 'compact' : ''}`}
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => document.getElementById('form-file-input-upload').click()}
+              >
+                <span className="upload-icon-main"><UploadCloud size={20} /></span>
+                <p className="drag-instructions">
+                  {uploadFilesList.length > 0 ? 'Drag & drop more files, or browse' : 'Drag & Drop candidate resumes here, or browse files'}
+                </p>
+                {uploadFilesList.length === 0 && (
+                  <span className="supported-formats-text">Supported formats: PDF, DOC, DOCX, TXT (Max 20MB per file)</span>
+                )}
+                <input
+                  id="form-file-input-upload"
+                  type="file"
+                  multiple={true}
+                  accept=".pdf,.doc,.docx,.txt"
+                  className="hidden-file-input"
+                  onChange={handleFileChange}
+                  disabled={isSubmitting}
+                  style={{ display: 'none' }}
+                />
+              </div>
 
-                  {uploadStatus === 'uploading' && (
-                    <div className="form-upload-progress-container">
-                      <div className="form-upload-progress-bar">
-                        <div className="form-upload-progress-fill" style={{ width: `${uploadProgress}%` }} />
+              {/* Files List */}
+              {uploadFilesList.length > 0 && (
+                <div className="bundle-files-list">
+                  {uploadFilesList.map((f) => (
+                    <div key={f.id} className={`bundle-file-card status-${f.status}`}>
+                      <div className="bundle-file-row">
+                        <div className="bundle-file-info-col">
+                          <Paperclip size={14} className="file-icon" />
+                          <span className="bundle-filename" title={f.file.name}>{f.file.name}</span>
+                          <span className="bundle-filesize">({(f.file.size / (1024 * 1024)).toFixed(2)} MB)</span>
+                        </div>
+                        
+                        <div className="bundle-file-status-col">
+                          {f.status === 'pending' && !isSubmitting && (
+                            <button
+                              type="button"
+                              className="bundle-remove-btn"
+                              onClick={() => setUploadFilesList(prev => prev.filter(x => x.id !== f.id))}
+                            >
+                              ✕
+                            </button>
+                          )}
+                          {f.status === 'uploading' && (
+                            <span className="bundle-pct">{f.progress}%</span>
+                          )}
+                          {f.status === 'completed' && (
+                            <span className="bundle-label completed">
+                              <CheckCircle2 size={14} /> Done
+                            </span>
+                          )}
+                          {f.status === 'duplicate' && (
+                            <div className="bundle-duplicate-actions">
+                              <span className="bundle-label duplicate">Duplicate</span>
+                              <button
+                                type="button"
+                                className="bundle-link-profile-btn"
+                                onClick={() => {
+                                  if (onSelectCandidate) onSelectCandidate(f.duplicateCandidateId);
+                                  onClose();
+                                }}
+                              >
+                                View
+                              </button>
+                            </div>
+                          )}
+                          {f.status === 'failed' && (
+                            <span className="bundle-label failed">Failed</span>
+                          )}
+                        </div>
                       </div>
-                      <span className="form-upload-percentage">{uploadProgress}%</span>
-                    </div>
-                  )}
 
-                  {uploadStatus === 'processing' && (
-                    <div className="form-upload-progress-container">
-                      <div className="form-upload-progress-bar">
-                        <div className="form-upload-progress-fill completed" style={{ width: '100%' }} />
-                      </div>
-                      <span className="form-upload-processing-label">
-                        <span className="btn-spinner dark" />
-                        Analyzing resume with AI…
-                      </span>
-                    </div>
-                  )}
+                      {f.status === 'uploading' && (
+                        <div className="bundle-progress-bar">
+                          <div className="bundle-progress-fill" style={{ width: `${f.progress}%` }} />
+                        </div>
+                      )}
 
-                  {uploadStatus === 'completed' && (
-                    <div className="form-upload-progress-container">
-                      <div className="form-upload-progress-bar">
-                        <div className="form-upload-progress-fill completed" style={{ width: '100%' }} />
-                      </div>
-                      <span className="form-upload-completed-label">
-                        <CheckCircle2 size={14} />
-                        Done
-                      </span>
+                      {f.status === 'failed' && f.errorMessage && (
+                        <div className="bundle-error-text">{f.errorMessage}</div>
+                      )}
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
             </div>
 
             <div className="modal-actions">
-              <button type="button" className="cancel-form-btn" onClick={onClose} disabled={isSubmitting}>
-                Cancel
+              {isSubmitting && (
+                <button
+                  type="button"
+                  className="minimize-form-btn"
+                  onClick={() => setIsMinimized(true)}
+                  style={{ marginRight: 'auto' }}
+                >
+                  Run in Background
+                </button>
+              )}
+              
+              <button
+                type="button"
+                className="cancel-form-btn"
+                onClick={() => {
+                  setUploadFilesList([]);
+                  onClose();
+                }}
+                disabled={isSubmitting}
+              >
+                Close
               </button>
-              <button type="submit" className="submit-form-btn" disabled={isSubmitting || !uploadFile || uploadStatus === 'completed'}>
-                {isSubmitting && <span className="btn-spinner" style={{ marginRight: '6px' }} />}
-                {uploadStatus === 'completed'
-                  ? <><CheckCircle2 size={14} style={{ marginRight: '6px', verticalAlign: 'text-bottom' }} />Done</>
-                  : isSubmitting
-                    ? (uploadStatus === 'processing' ? 'Analyzing resume…' : 'Uploading…')
-                    : 'Start Upload'}
+              <button
+                type="submit"
+                className="submit-form-btn"
+                disabled={isSubmitting || uploadFilesList.length === 0 || uploadFilesList.every(f => f.status === 'completed' || f.status === 'duplicate')}
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="btn-spinner" style={{ marginRight: '6px' }} />
+                    Uploading...
+                  </>
+                ) : (
+                  'Upload Bundle'
+                )}
               </button>
             </div>
           </form>
